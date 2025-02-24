@@ -2,8 +2,76 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes dot-flashing {
+  0% { opacity: 0.2; }
+  50% { opacity: 1; }
+  100% { opacity: 0.2; }
+}
 
+.dot-flashing {
+  position: relative;
+  width: 4px;
+  height: 4px;
+  border-radius: 2px;
+  background-color: currentColor;
+  animation: dot-flashing 1s infinite linear;
+}
 
+.dot-flashing::before,
+.dot-flashing::after {
+  content: '';
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 2px;
+  background-color: currentColor;
+  animation: dot-flashing 1s infinite linear;
+}
+
+.dot-flashing::before {
+  left: -8px;
+  animation-delay: 0s;
+}
+
+.dot-flashing::after {
+  left: 8px;
+  animation-delay: 0.2s;
+}
+@keyframes dot-flashing {
+  0% { opacity: 0.2; }
+  50% { opacity: 1; }
+  100% { opacity: 0.2; }
+}
+
+.dot-flashing {
+  position: relative;
+  width: 4px;
+  height: 4px;
+  border-radius: 2px;
+  background-color: currentColor;
+  animation: dot-flashing 1s infinite linear;
+}
+
+.dot-flashing::before,
+.dot-flashing::after {
+  content: '';
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 2px;
+  background-color: currentColor;
+  animation: dot-flashing 1s infinite linear;
+}
+
+.dot-flashing::before {
+  left: -8px;
+  animation-delay: 0s;
+}
+
+.dot-flashing::after {
+  left: 8px;
+  animation-delay: 0.2s;
+}
 @layer base {
   :root {
 

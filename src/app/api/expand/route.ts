@@ -1,74 +1,82 @@
 // app/api/expand/route.ts
-
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
+import Together from "together-ai";
 import { authOptions } from "@/lib/auth/auth";
- // adjust import path as needed
 
 export async function POST(request: Request) {
-  // Check user session
-  const session = await getServerSession(authOptions);
-  if (!session || !session.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const body = await request.json();
-  const { sceneDescription, expansionType, conversationContext } = body;
-
-  if (!sceneDescription) {
-    return NextResponse.json(
-      { error: "Missing scene description" },
-      { status: 400 }
-    );
-  }
-
-  const contextText = conversationContext
-    ? `Previous context: ${conversationContext}\n`
-    : "";
-
-  const expansionInstruction = expansionType
-    ? `Expand the scene focusing on ${expansionType}.`
-    : "Expand the scene with additional dialogue, transitions, and descriptive details.";
-
-  const prompt = `${contextText}${expansionInstruction} Here is the scene description: ${sceneDescription}`;
-
   try {
-    // Check if environment variables are defined
-    if (!process.env.AI_API_ENDPOINT || !process.env.AI_API_KEY) {
-      console.error("Missing AI API configuration");
+    // Authentication check
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Parse and validate request body
+    const body = await request.json();
+    const { sceneDescription, expansionType, conversationContext } = body;
+
+    if (!sceneDescription) {
+      return NextResponse.json(
+        { error: "Missing required field: sceneDescription" },
+        { status: 400 }
+      );
+    }
+
+    // Validate environment variables
+    if (!process.env.TOGETHER_API_KEY) {
       return NextResponse.json(
         { error: "Server configuration error" },
         { status: 500 }
       );
     }
 
-    const aiResponse = await fetch(process.env.AI_API_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.AI_API_KEY}`,
-      },
-      body: JSON.stringify({ prompt }),
+    // Construct the prompt
+    const contextText = conversationContext ? `Context:\n${conversationContext}\n\n` : "";
+    const expansionFocus = expansionType ? `Focus on: ${expansionType}\n` : "";
+    const prompt = `${contextText}Expand this scene with additional details, dialogue, and transitions.\n${expansionFocus}Scene description: ${sceneDescription}`;
+
+    // Initialize Together client
+    const together = new Together({ apiKey: process.env.TOGETHER_API_KEY });
+
+    // Create streaming response
+    const stream = await together.chat.completions.create({
+      model: "meta-llama/Llama-3.1-8B-Instruct-Turbo",
+      messages: [{ role: "user", content: prompt }],
+      stream: true,
+      temperature: 0.7,
+      max_tokens: 2000
     });
 
-    if (!aiResponse.ok) {
-      const errorText = await aiResponse.text();
-      console.error("AI API Error:", errorText);
-      throw new Error(`AI API Error: ${errorText}`);
-    }
+    // Create ReadableStream
+    const encoder = new TextEncoder();
+    const readableStream = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const chunk of stream) {
+            const content = chunk.choices[0]?.delta?.content || "";
+            controller.enqueue(encoder.encode(content));
+          }
+        } catch (error) {
+          console.error("Streaming error:", error);
+          controller.error(error);
+        } finally {
+          controller.close();
+        }
+      },
+    });
 
-    const data = await aiResponse.json();
-    
-    // Check if the response has the expected structure
-    if (!data.generatedText) {
-      throw new Error("Invalid response format from AI API");
-    }
+    return new Response(readableStream, {
+      headers: { 
+        "Content-Type": "text/plain",
+        "X-Content-Type-Options": "nosniff" 
+      },
+    });
 
-    return NextResponse.json({ expandedText: data.generatedText });
   } catch (error) {
-    console.error("Error in /api/expand:", error);
+    console.error("API Error:", error);
     return NextResponse.json(
-      { error: "Internal Server Error", details: error instanceof Error ? error.message : 'Unknown error' },
+      { error: "Internal server error", details: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }
     );
   }
