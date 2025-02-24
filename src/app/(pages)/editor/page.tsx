@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
-
+import ReactMarkdown from 'react-markdown';
 type Message = {
   id: string;
   type: "user" | "ai" | "system";
@@ -261,10 +261,10 @@ const response = await fetch(endpoint, {
                   </div>
                 ) : (
                   <>
-                   <div className="text-sm whitespace-pre-wrap prose max-w-none">
-
+                <div className="text-sm whitespace-pre-wrap prose max-w-none">
+  <ReactMarkdown>
     {message.text}
-
+  </ReactMarkdown>
 </div>
                     <div className="text-xs mt-1 opacity-70">
                       {new Date(message.timestamp).toLocaleTimeString()}
