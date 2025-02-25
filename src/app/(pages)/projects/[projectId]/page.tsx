@@ -73,37 +73,44 @@ export default function ProjectEditor() {
   });
 
   // Load project data on mount
-  useEffect(() => {
-    const loadProjectData = async () => {
-      try {
-        const response = await fetch(`/api/projects/${projectId}`);
-        if (!response.ok) throw new Error("Failed to load project");
-        const data = await response.json();
-        
-        setProjectDetails(data);
-        
-        // Convert stored messages to conversation history
-        const initialMessages = data.messages.map((msg: {
-          id: string;
-          role: "USER" | "AI";
-          content: string;
-          createdAt: string;
-        }) => ({
-          id: msg.id,
-          type: msg.role === "USER" ? "user" : "ai",
-          text: msg.content,
-          timestamp: new Date(msg.createdAt).getTime(),
-          isPending: false
-        }));
-        
-        setConversationHistory(initialMessages);
-      } catch (error) {
-        console.error("Error loading project:", error);
+ // Update the useEffect loading logic
+useEffect(() => {
+  const loadProjectData = async () => {
+    try {
+      const response = await fetch(`/api/projects/${projectId}`);
+      if (!response.ok) throw new Error("Failed to load project");
+      const data = await response.json();
+      
+      if (!data) {
+        console.error("No project data received");
+        return;
       }
-    };
 
-    loadProjectData();
-  }, [projectId]);
+      setProjectDetails(data);
+      
+      // Convert stored messages to conversation history
+      const initialMessages = (data.messages || []).map((msg: {
+        id: string;
+        role: "USER" | "AI";
+        content: string;
+        createdAt: string;
+      }) => ({
+        id: msg.id,
+        type: msg.role === "USER" ? "user" : "ai",
+        text: msg.content,
+        timestamp: new Date(msg.createdAt).getTime(),
+        isPending: false
+      }));
+      
+      setConversationHistory(initialMessages);
+    } catch (error) {
+      console.error("Error loading project:", error);
+      console.log("API Response:"); // Add debug logging
+    }
+  };
+
+  loadProjectData();
+}, [projectId]);
 
   // Auto-save project details
   useEffect(() => {
@@ -284,12 +291,12 @@ export default function ProjectEditor() {
 
           <div>
             <label className="block text-sm font-medium mb-1">Objectives</label>
-            <textarea
+            {/* <textarea
               value={projectDetails.briefing.objectives}
               onChange={(e) => handleProjectUpdate("objectives", e.target.value)}
               className="w-full p-2 border rounded-md text-sm h-24"
               placeholder="Primary purpose of the script..."
-            />
+            /> */}
           </div>
 
           <div>
