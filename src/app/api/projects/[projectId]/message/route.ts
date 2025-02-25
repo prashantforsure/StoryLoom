@@ -1,4 +1,4 @@
-// app/api/projects/[projectId]/messages/route.ts
+
 
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
