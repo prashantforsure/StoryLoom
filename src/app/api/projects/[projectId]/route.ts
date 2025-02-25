@@ -44,3 +44,25 @@ export async function GET(request: Request, { params }: { params: { projectId: s
     );
   }
 }
+export async function PATCH(request: Request, { params }: { params: { projectId: string } }) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  
+  const { projectId } = params;
+  
+  try {
+    const body = await request.json();
+    // Here you update the fields you allow to be updated.
+    const updatedProject = await prisma.scriptProject.update({
+      where: { id: projectId },
+      data: body, // You might want to validate fields before updating.
+    });
+    
+    return NextResponse.json({ project: updatedProject }, { status: 200 });
+  } catch (error) {
+    console.error("Error updating project:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}

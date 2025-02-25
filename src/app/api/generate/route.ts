@@ -1,152 +1,3 @@
-// import { NextResponse } from "next/server";
-// import { getServerSession } from "next-auth/next";
-// import Together from "together-ai";
-// import { authOptions } from "@/lib/auth/auth";
-
-// // Maximum allowed input lengths
-// const MAX_INPUT_LIMITS = {
-//   TITLE: 100,
-//   OUTLINE: 2000,
-//   CONTEXT: 4000,
-// };
-
-// export async function POST(request: Request) {
-//   const session = await getServerSession(authOptions);
-//   if (!session?.user?.id) {
-//     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-//   }
-
-//   try {
-//     const body = await request.json();
-//     const { tone, style, templateId, outline, conversationContext, title } = body;
-
-//     // Enhanced validation with input sanitization
-//     const validationErrors: string[] = [];
-//     if (!tone) validationErrors.push("tone");
-//     if (!style) validationErrors.push("style");
-//     if (!outline) validationErrors.push("outline");
-//     if (validationErrors.length > 0) {
-//       return NextResponse.json(
-//         { error: `Missing required fields: ${validationErrors.join(", ")}` },
-//         { status: 400 }
-//       );
-//     }
-
-//     // Input length validation
-//     if (title && title.length > MAX_INPUT_LIMITS.TITLE) {
-//       validationErrors.push("Title exceeds maximum length");
-//     }
-//     if (outline.length > MAX_INPUT_LIMITS.OUTLINE) {
-//       validationErrors.push("Outline exceeds maximum length");
-//     }
-//     if (conversationContext && conversationContext.length > MAX_INPUT_LIMITS.CONTEXT) {
-//       validationErrors.push("Context exceeds maximum length");
-//     }
-//     if (validationErrors.length > 0) {
-//       return NextResponse.json(
-//         { error: `Validation failed: ${validationErrors.join(", ")}` },
-//         { status: 400 }
-//       );
-//     }
-
-//     // Structured prompt engineering with explicit Markdown instructions
-//     const templateInstruction = templateId
-//       ? `
-// **Template Requirements:**
-// - Follow the ${templateId} structure.
-// - Use clear section headers and consistent formatting.
-// `
-//       : "";
-
-//     const contextText = conversationContext
-//       ? `
-// **Previous Context:**
-// ${conversationContext.slice(0, MAX_INPUT_LIMITS.CONTEXT)}
-// `
-//       : "";
-
-//     const titleText = title
-//       ? `**Title:** ${title}\n`
-//       : "**Title:** Untitled Script\n";
-
-//     const prompt = `
-// Imagine you are an award-winning scriptwriter known for crafting engaging, visually rich screenplays. Your output must be in **Markdown** format with clear hierarchy.
-
-// ${contextText}
-// ${titleText}
-
-// **Instructions:**
-// - Write a script section in a **${tone.toLowerCase()}** tone and **${style.toLowerCase()}** style.
-// - Follow the formatting and style guidelines provided${templateId ? " in the template." : "."}
-// - Use **##** for main headings, **###** for subheadings.
-// - Include bullet points, numbered lists, and clear section breaks where appropriate.
-// - Format dialogues, scene descriptions, and transitions with proper Markdown syntax.
-  
-// **Outline:**
-// ${outline.slice(0, MAX_INPUT_LIMITS.OUTLINE)}
-
-// Return your output as well-formatted Markdown.
-//     `.trim();
-
-//     // Validate API configuration
-//     if (!process.env.TOGETHER_AI_API_KEY) {
-//       console.error("Missing Together API key");
-//       return NextResponse.json(
-//         { error: "Server configuration error" },
-//         { status: 500 }
-//       );
-//     }
-
-//     const together = new Together({ apiKey: process.env.TOGETHER_AI_API_KEY });
-
-//     // Request streaming response from Together AI with optimized parameters
-//     const stream = await together.chat.completions.create({
-//       model: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-//       messages: [
-//         {
-//           role: "system",
-//           content:
-//             "You are a professional scriptwriter specialized in producing well-structured, visually engaging screenplays in Markdown format.",
-//         },
-//         { role: "user", content: prompt },
-//       ],
-//       stream: true,
-//       temperature: 0.7,
-//       max_tokens: 2000,
-//     });
-
-//     const encoder = new TextEncoder();
-//     const readableStream = new ReadableStream({
-//       async start(controller) {
-//         try {
-//           for await (const chunk of stream) {
-//             const content = chunk.choices[0]?.delta?.content || "";
-//             controller.enqueue(encoder.encode(content));
-//           }
-//         } catch (error) {
-//           console.error("Streaming error:", error);
-//           controller.error(error);
-//         }
-//         controller.close();
-//       },
-//     });
-
-//     return new Response(readableStream, {
-//       headers: {
-//         "Content-Type": "text/markdown; charset=utf-8",
-//         "X-Content-Type-Options": "nosniff",
-//       },
-//     });
-//   } catch (error) {
-//     console.error("API Error:", error);
-//     return NextResponse.json(
-//       { error: "Internal server error" },
-//       { status: 500 }
-//     );
-//   }
-// }
-
-
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import Together from "together-ai";
@@ -160,9 +11,26 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { tone, style, templateId, outline, conversationContext, title } = body;
+    const { 
+      tone, 
+      style, 
+      templateId, 
+      outline, 
+      conversationContext, 
+      title,
+      // Optional additional briefing fields:
+      targetAudience,
+      distributionPlatform,
+      genre,
+      stylisticReferences,
+      logline,
+      plotOutline,
+      theme,
+      overallTone,
+      // You can add more as needed…
+    } = body;
 
-    // Enhanced validation
+    // Enhanced validation: Require tone, style, and outline.
     const missingFields: string[] = [];
     if (!tone) missingFields.push("tone");
     if (!style) missingFields.push("style");
@@ -174,24 +42,61 @@ export async function POST(request: Request) {
       );
     }
 
-    // Optimized prompt construction for professional scriptwriting
-    const templateInstruction = templateId ? `Follow the formatting and style guidelines of the ${templateId} template. ` : "";
-    const contextText = conversationContext ? `Previous Conversation Context:\n${conversationContext}\n\n` : "";
+    // Build extended context strings if available
+    const contextText = conversationContext
+      ? `Previous Conversation Context:\n${conversationContext}\n\n`
+      : "";
     const titleText = title ? `Title: ${title}\n\n` : "Title: Untitled Script\n\n";
+    const targetAudienceText = targetAudience ? `Target Audience: ${targetAudience}\n` : "";
+    const distributionText = distributionPlatform ? `Distribution Platform: ${distributionPlatform}\n` : "";
+    const genreText = genre ? `Genre: ${genre}\n` : "";
+    const stylisticText = stylisticReferences && stylisticReferences.length > 0
+      ? `Stylistic References: ${stylisticReferences.join(", ")}\n`
+      : "";
+    const loglineText = logline ? `Logline: ${logline}\n` : "";
+    const plotOutlineText = plotOutline ? `Plot Outline: ${plotOutline}\n` : "";
+    const themeText = theme ? `Theme: ${theme}\n` : "";
+    const overallToneText = overallTone ? `Overall Tone: ${overallTone}\n` : "";
+
+    // Template instructions if provided
+    const templateInstruction = templateId
+      ? `Follow the formatting and style guidelines of the ${templateId} template.\n`
+      : "";
+
+    // Construct the comprehensive prompt
     const prompt = `
-Imagine you are an award-winning scriptwriter known for creating engaging and visually rich screenplays. 
-${contextText}
+Imagine you are a world-class, award-winning scriptwriter known for crafting engaging, visually rich screenplays for film, television, and digital media. You have been given the following detailed project briefing:
+
 ${titleText}
-Write a script section in a ${tone.toLowerCase()} tone and ${style.toLowerCase()} style. ${templateInstruction}
-Use the following outline as your guide to craft an immersive narrative that includes:
-- Clear scene headings,
-- Detailed scene descriptions,
-- Vivid character dialogues with proper formatting,
-- Creative transitions and pacing that capture the audience’s attention.
-Outline:
+${overallToneText}${targetAudienceText}${distributionText}${genreText}${stylisticText}${loglineText}${plotOutlineText}${themeText}
+
+**Project Overview & Objectives:**
+- Purpose & Goal: Create an immersive narrative that captivates the audience.
+- Target Audience: ${targetAudience || "Not specified"}
+- Distribution & Platform: ${distributionPlatform || "Not specified"}
+
+**Genre & Style:**
+- Genre: ${genre || "Not specified"}
+- Script Format: ${templateId ? `${templateId} template` : "Standard Screenplay Format"}
+- Stylistic References: ${(stylisticReferences && stylisticReferences.join(", ")) || "Not specified"}
+
+**Story Elements & Structure:**
+- Logline & Premise: ${logline || "Not specified"}
+- Plot Outline & Structure: ${plotOutline || "Not specified"}
+- Theme & Message: ${theme || "Not specified"}
+- Use clear scene headings, detailed descriptions, and dynamic dialogue to convey the narrative.
+
+**Characters & Dialogue:**
+- Develop vivid, realistic characters and write engaging dialogue that reflects the desired tone and style.
+
+**Technical & Formatting Requirements:**
+- Use professional screenplay formatting in Markdown.
+- Ensure the final output includes clear section headers, bullet lists for key points, and proper transitions.
+
+Use the following outline as your guide:
 ${outline}
 
-Ensure that the final output adheres to professional screenplay formatting.
+Return your output as a well-formatted Markdown text following the guidelines above.
     `.trim();
 
     const together = new Together({ apiKey: process.env.TOGETHER_AI_API_KEY });
@@ -201,7 +106,8 @@ Ensure that the final output adheres to professional screenplay formatting.
       messages: [{ role: "user", content: prompt }],
       stream: true,
       temperature: 0.7,
-      max_tokens: 2000
+      max_tokens: 2000,
+      // Optionally: add stop sequences if needed, e.g. stop: ["## References", "## Appendix"]
     });
 
     const encoder = new TextEncoder();
@@ -222,11 +128,11 @@ Ensure that the final output adheres to professional screenplay formatting.
 
     return new Response(readableStream, {
       headers: { 
-        "Content-Type": "text/plain",
+        "Content-Type": "text/markdown; charset=utf-8",
         "X-Content-Type-Options": "nosniff" 
       },
     });
-
+    
   } catch (error) {
     console.error("API Error:", error);
     return NextResponse.json(
@@ -235,3 +141,4 @@ Ensure that the final output adheres to professional screenplay formatting.
     );
   }
 }
+
