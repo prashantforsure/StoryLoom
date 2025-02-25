@@ -1,10 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
-
 // schema.prisma
 
 datasource db {
@@ -16,25 +9,23 @@ generator client {
   provider = "prisma-client-js"
 }
 
-
-
-
+// --- NextAuth models ---
 model User {
-  id             String         @id @default(cuid())
+  id             String          @id @default(cuid())
   name           String?
-  email          String?        @unique
+  email          String?         @unique
   emailVerified  DateTime?
   image          String?
-  // NextAuth relations
   accounts       Account[]
   sessions       Session[]
-  // Custom relations
-  preference     Preference?
-  scripts        Script[]
+  preferences    Preference?
+  projects       ScriptProject[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 }
 
 model Account {
-  id                 String  @id @default(cuid())
+  id                 String   @id @default(cuid())
   userId             String
   type               String
   provider           String
@@ -46,7 +37,7 @@ model Account {
   scope              String?
   id_token           String?
   session_state      String?
-  user               User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
@@ -67,51 +58,80 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
+// --- User Preferences ---
 model Preference {
-  id             String   @id @default(cuid())
-  userId         String   @unique
-  genres         String[] // e.g., ["thriller", "comedy"]
-  tones          String[] // e.g., ["dramatic", "sarcastic"]
-  styles         String[] // e.g., ["cinematic", "narrative"]
-  referenceWorks String[] // e.g., ["Quentin Tarantino", "Wes Anderson"]
-
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String    @id @default(cuid())
+  userId         String    @unique
+  genres         String[]  // e.g., ["thriller", "comedy"]
+  tones          String[]  // e.g., ["dramatic", "sarcastic"]
+  styles         String[]  // e.g., ["cinematic", "narrative"]
+  referenceWorks String[]  // e.g., ["Quentin Tarantino", "Wes Anderson"]
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model Template {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  type        String   // e.g., "movie", "stage play", "web series"
-  content     Json     // Structured template data (could include formatting guidelines)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  scripts     Script[]
-}
-
-model Script {
+// --- Script Projects and Briefings ---
+model ScriptProject {
   id         String           @id @default(cuid())
   userId     String
   title      String
-  templateId String?          // Optional association with a Template
-  content    String           // The current version of the script (could be raw text or structured JSON)
-  status     String           // e.g., "draft", "published"
+  briefing   ScriptBriefing?  // one-to-one; detailed briefing about the project
+  scripts    Script[]         // generated script versions (drafts, final outputs)
+  messages   Message[]        // conversation log between the user and AI
   createdAt  DateTime         @default(now())
   updatedAt  DateTime         @updatedAt
-
   user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  template   Template?        @relation(fields: [templateId], references: [id])
-  revisions  ScriptRevision[]
 }
 
-model ScriptRevision {
-  id             String    @id @default(cuid())
-  scriptId       String
-  revisionNumber Int
-  content        String
-  createdAt      DateTime  @default(now())
-  
-  script         Script    @relation(fields: [scriptId], references: [id], onDelete: Cascade)
-
-  @@unique([scriptId, revisionNumber])
+model ScriptBriefing {
+  id                    String         @id @default(cuid())
+  projectId             String         @unique
+  overview              String?        // Project overview
+  objectives            String?        // What the script should achieve
+  targetAudience        String?        // Demographics, cultural context, etc.
+  distributionPlatform  String?        // e.g., film, TV, web series, stage play, podcast
+  overallTone           String?        // e.g., dark, humorous, inspirational
+  mood                  String?        // e.g., suspenseful, lighthearted
+  genre                 String?        // Primary genre
+  subGenres             String[]       // Optional sub-genres
+  scriptFormat          String?        // e.g., screenplay, teleplay, stage play
+  stylisticReferences   String?        // e.g., "Nolan, Tarantino, Wes Anderson"
+  logline               String?        // A one-sentence summary
+  plotOutline           String?        // Detailed plot outline (beginning, middle, end)
+  theme                 String?        // Central themes or messages
+  setting               String?        // Time period, location, world details
+  pacing                String?        // Preferred pacing (fast, slow burn, episodic)
+  characters            Json?          // JSON array of character profiles
+  research              Json?          // Supplementary research notes (JSON)
+  revisionDetails       Json?          // Revision history preferences or notes (JSON)
+  budget                String?        // Budget constraints or notes
+  timeline              String?        // Deadlines, milestones, or delivery dates
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  project               ScriptProject  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
+
+model Script {
+  id          String         @id @default(cuid())
+  projectId   String
+  content     String         // Final or draft generated script content
+  status      String         // e.g., "draft", "published", "final"
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  project     ScriptProject  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// --- Conversation Messages ---
+enum MessageRole {
+  USER
+  AI
+}
+
+model Message {
+  id         String          @id @default(cuid())
+  projectId  String
+  role       MessageRole
+  content    String
+  createdAt  DateTime        @default(now())
+  project    ScriptProject   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
