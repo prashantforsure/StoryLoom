@@ -13,12 +13,12 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { 
       tone, 
-      style, 
+      style,
+      scriptFormat, // Added support for scriptFormat
       templateId, 
       outline, 
       conversationContext, 
       title,
-      // Optional additional briefing fields:
       targetAudience,
       distributionPlatform,
       genre,
@@ -27,13 +27,15 @@ export async function POST(request: Request) {
       plotOutline,
       theme,
       overallTone,
-      // You can add more as needed…
     } = body;
 
-    // Enhanced validation: Require tone, style, and outline.
+    // Define styleOrFormat to handle both field names
+    const styleOrFormat = style || scriptFormat || "Not specified";
+
+    // Enhanced validation: Require tone, style/scriptFormat, and outline.
     const missingFields: string[] = [];
     if (!tone) missingFields.push("tone");
-    if (!style) missingFields.push("style");
+    if (!(style || scriptFormat)) missingFields.push("style/scriptFormat"); // Accept either field
     if (!outline) missingFields.push("outline");
     if (missingFields.length > 0) {
       return NextResponse.json(
@@ -42,22 +44,25 @@ export async function POST(request: Request) {
       );
     }
 
-    // Build extended context strings if available
+    // Build extended context strings if available, with fallbacks.
     const contextText = conversationContext
       ? `Previous Conversation Context:\n${conversationContext}\n\n`
       : "";
     const titleText = title ? `Title: ${title}\n\n` : "Title: Untitled Script\n\n";
-    const targetAudienceText = targetAudience ? `Target Audience: ${targetAudience}\n` : "";
-    const distributionText = distributionPlatform ? `Distribution Platform: ${distributionPlatform}\n` : "";
-    const genreText = genre ? `Genre: ${genre}\n` : "";
-    const stylisticText = stylisticReferences && stylisticReferences.length > 0
-      ? `Stylistic References: ${stylisticReferences.join(", ")}\n`
-      : "";
-    const loglineText = logline ? `Logline: ${logline}\n` : "";
-    const plotOutlineText = plotOutline ? `Plot Outline: ${plotOutline}\n` : "";
-    const themeText = theme ? `Theme: ${theme}\n` : "";
+    const targetAudienceText = targetAudience ? `Target Audience: ${targetAudience}\n` : "Target Audience: Not specified\n";
+    const distributionText = distributionPlatform ? `Distribution Platform: ${distributionPlatform}\n` : "Distribution Platform: Not specified\n";
+    const genreText = genre ? `Genre: ${genre}\n` : "Genre: Not specified\n";
+    // Ensure stylisticReferences is a string (join if it's an array)
+    const stylisticText = stylisticReferences
+      ? (Array.isArray(stylisticReferences)
+          ? `Stylistic References: ${stylisticReferences.join(", ")}\n`
+          : `Stylistic References: ${stylisticReferences}\n`)
+      : "Stylistic References: Not specified\n";
+    const loglineText = logline ? `Logline: ${logline}\n` : "Logline: Not specified\n";
+    const plotOutlineText = plotOutline ? `Plot Outline: ${plotOutline}\n` : "Plot Outline: Not specified\n";
+    const themeText = theme ? `Theme: ${theme}\n` : "Theme: Not specified\n";
     const overallToneText = overallTone ? `Overall Tone: ${overallTone}\n` : "";
-
+    
     // Template instructions if provided
     const templateInstruction = templateId
       ? `Follow the formatting and style guidelines of the ${templateId} template.\n`
@@ -65,7 +70,7 @@ export async function POST(request: Request) {
 
     // Construct the comprehensive prompt
     const prompt = `
-Imagine you are a world-class, award-winning scriptwriter known for crafting engaging, visually rich screenplays for film, television, and digital media. You have been given the following detailed project briefing:
+Imagine you are a world-class, award-winning scriptwriter renowned for crafting engaging, visually rich screenplays for film, television, and digital media. You have been given the following detailed project briefing:
 
 ${titleText}
 ${overallToneText}${targetAudienceText}${distributionText}${genreText}${stylisticText}${loglineText}${plotOutlineText}${themeText}
@@ -77,8 +82,8 @@ ${overallToneText}${targetAudienceText}${distributionText}${genreText}${stylisti
 
 **Genre & Style:**
 - Genre: ${genre || "Not specified"}
-- Script Format: ${templateId ? `${templateId} template` : "Standard Screenplay Format"}
-- Stylistic References: ${(stylisticReferences && stylisticReferences.join(", ")) || "Not specified"}
+- Script Format: ${styleOrFormat}
+- Stylistic References: ${(stylisticReferences && (Array.isArray(stylisticReferences) ? stylisticReferences.join(", ") : stylisticReferences)) || "Not specified"}
 
 **Story Elements & Structure:**
 - Logline & Premise: ${logline || "Not specified"}
@@ -99,24 +104,29 @@ ${outline}
 Return your output as a well-formatted Markdown text following the guidelines above.
     `.trim();
 
-    const together = new Together({ apiKey: process.env.TOGETHER_AI_API_KEY });
+    console.log("Prompt sent to Together AI:", prompt);
 
+    const together = new Together({ apiKey: process.env.TOGETHER_AI_API_KEY });
     const stream = await together.chat.completions.create({
       model: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
       messages: [{ role: "user", content: prompt }],
       stream: true,
       temperature: 0.7,
-      max_tokens: 2000,
-      // Optionally: add stop sequences if needed, e.g. stop: ["## References", "## Appendix"]
+      max_tokens: 1500,
     });
 
     const encoder = new TextEncoder();
     const readableStream = new ReadableStream({
       async start(controller) {
         try {
+          let hasData = false;
           for await (const chunk of stream) {
             const content = chunk.choices[0]?.delta?.content || "";
+            if (content) hasData = true;
             controller.enqueue(encoder.encode(content));
+          }
+          if (!hasData) {
+            controller.enqueue(encoder.encode("\n*No content generated.*"));
           }
         } catch (error) {
           console.error("Streaming error:", error);
@@ -132,13 +142,8 @@ Return your output as a well-formatted Markdown text following the guidelines ab
         "X-Content-Type-Options": "nosniff" 
       },
     });
-    
   } catch (error) {
     console.error("API Error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
-

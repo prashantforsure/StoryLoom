@@ -1,12 +1,12 @@
-// app/dashboard/page.tsx
 import { Metadata } from "next";
-import { getServerSession } from "next-auth/next";
-
+import { getServerSession } from "next-auth/next"; 
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import { cookies } from "next/headers";
 import { authOptions } from "@/lib/auth/auth";
 import CreateProjectButton from "./CreateProjectButton"; 
+
 // We define a type for the Project
 type Project = {
   id: string;
@@ -20,20 +20,30 @@ export const metadata: Metadata = {
   description: "View and manage your AI-generated script projects.",
 };
 
-async function fetchProjects(): Promise<Project[]> {
-  // Replace with your actual domain or use an environment variable
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  const res = await fetch(`${baseUrl}/api/projects`, {
-    cache: "no-store",
-  });
-  if (!res.ok) {
+async function fetchProjects(userId: string): Promise<Project[]> {
+  try {
+    // Server-side API call using native fetch which preserves auth context
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const res = await fetch(`${baseUrl}/api/projects`, {
+      cache: "no-store",
+      headers: {
+        Cookie: cookies().toString(),
+      },
+    });
+    
+    if (!res.ok) {
+      console.error(`Error fetching projects: ${res.status} ${res.statusText}`);
+      return [];
+    }
+    
+    const data = await res.json();
+    return data.projects || [];
+  } catch (error) {
+    console.error("Error fetching projects:", error);
     return [];
   }
-  const data = await res.json();
-  return data.projects || [];
 }
-
-
+ 
 export default async function DashboardPage() {
   // Check user session
   const session = await getServerSession(authOptions);
@@ -41,10 +51,10 @@ export default async function DashboardPage() {
     // If no user, redirect to sign in or home
     redirect("/api/auth/signin");
   }
-
+  
   // Fetch the user's projects from the API
-  const projects = await fetchProjects();
-
+  const projects = await fetchProjects(session.user.id);
+  
   return (
     <main className="max-w-6xl mx-auto px-4 py-8">
       {/* Page Header */}
@@ -57,7 +67,7 @@ export default async function DashboardPage() {
           <CreateProjectButton />
         </div>
       </header>
-
+      
       {/* Projects Section */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {projects.length === 0 ? (
@@ -76,12 +86,7 @@ export default async function DashboardPage() {
                   {project.title}
                 </h2>
                 {/* Example icon or image */}
-                <Image
-                  src="/assets/script-icon.png" // Replace with your own icon path
-                  alt="Script Icon"
-                  width={24}
-                  height={24}
-                />
+               
               </div>
               <p className="text-sm text-gray-500">
                 Created: {new Date(project.createdAt).toLocaleDateString()}

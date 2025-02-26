@@ -5,6 +5,9 @@ import { useSession } from "next-auth/react";
 import { useParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+// If you're using custom UI components like Label, Input, etc., import them here.
+// Otherwise, standard HTML elements are used.
+
 import axios from "axios";
 
 // --- Type Definitions ---
@@ -18,14 +21,14 @@ type Message = {
 
 type Briefing = {
   overallTone: string;
-  style: string;
+  scriptFormat: string; // renamed from "style"
   templateId: string;
   objectives: string;
   targetAudience: string;
   distributionPlatform: string;
   genre: string;
   subGenres: string[];
-  stylisticReferences: string[];
+  stylisticReferences: string; // a comma-separated string
   logline: string;
   plotOutline: string;
   theme: string;
@@ -46,14 +49,14 @@ type ProjectDetails = {
 // --- Default Briefing Object ---
 const defaultBriefing: Briefing = {
   overallTone: "Dramatic",
-  style: "Narrative",
+  scriptFormat: "Narrative", // Default style value stored as scriptFormat
   templateId: "template-1",
   objectives: "",
   targetAudience: "",
   distributionPlatform: "",
   genre: "",
   subGenres: [],
-  stylisticReferences: [],
+  stylisticReferences: "",
   logline: "",
   plotOutline: "",
   theme: "",
@@ -75,7 +78,7 @@ export default function ProjectEditor() {
     id: (projectId as string) || "",
     title: "",
     briefing: defaultBriefing,
-    messages: []
+    messages: [],
   });
 
   // --- Load project data on mount ---
@@ -90,12 +93,10 @@ export default function ProjectEditor() {
           console.error("No project data received");
           return;
         }
-        // Use default briefing if none is returned
         setProjectDetails({
           ...data.project,
           briefing: data.project.briefing || defaultBriefing,
         });
-        // Convert stored messages to conversation history
         const initialMessages = (data.project.messages || []).map((msg: {
           id: string;
           role: "USER" | "AI";
@@ -106,7 +107,7 @@ export default function ProjectEditor() {
           type: msg.role === "USER" ? "user" : "ai",
           text: msg.content,
           timestamp: new Date(msg.createdAt).getTime(),
-          isPending: false
+          isPending: false,
         }));
         setConversationHistory(initialMessages);
       } catch (error) {
@@ -125,7 +126,9 @@ export default function ProjectEditor() {
           await fetch(`/api/projects/${projectId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(projectDetails)
+            // Note: The payload includes the full projectDetails. The backend
+            // should map briefing.scriptFormat correctly.
+            body: JSON.stringify(projectDetails),
           });
         } catch (error) {
           console.error("Auto-save failed:", error);
@@ -150,60 +153,61 @@ export default function ProjectEditor() {
   };
 
   // --- Add Message & Persist to Backend ---
-  const addMessage = async (msg: Omit<Message, "id" | "timestamp">) => {
+  const addMessage = async (msg: Omit<Message, "id" | "timestamp">, persist = true) => {
     const newMessage: Message = {
       ...msg,
       id: createUniqueId(),
       timestamp: Date.now(),
     };
     setConversationHistory((prev) => [...prev, newMessage]);
-    try {
-      await fetch(`/api/projects/${projectId}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content: newMessage.text,
-          role: newMessage.type.toUpperCase()
-        }),
-      });
-    } catch (error) {
-      console.error("Failed to save message:", error);
+    if (persist && (msg.type !== "ai" || (msg.type === "ai" && msg.text.trim() !== ""))) {
+      try {
+        await fetch(`/api/projects/${projectId}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content: newMessage.text,
+            role: newMessage.type.toUpperCase(),
+          }),
+        });
+      } catch (error) {
+        console.error("Failed to save message:", error);
+      }
     }
   };
 
   // --- Handle Submission (Generate/Expand) ---
-  
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!inputText.trim() || loading) return;
-  
+
     try {
       setLoading(true);
-      
-      // Append user's message
+      // Append user's message (persisted immediately)
       await addMessage({ type: "user", text: inputText });
-      // Append a temporary AI message
-      await addMessage({ type: "ai", text: "", isPending: true });
-  
+      // Append a temporary AI message (do not persist until finalized)
+      await addMessage({ type: "ai", text: "", isPending: true }, false);
+
       // Build conversation context from all non-pending messages
-      const conversationContext = conversationHistory
+      const conversationContextStr = conversationHistory
         .filter((msg) => !msg.isPending)
         .map((msg) => `${msg.type}: ${msg.text}`)
         .join("\n");
-  
-      // Determine the endpoint based on selected action
+
+      // Determine endpoint
       const endpoint = selectedAction === "generate" ? "/api/generate" : "/api/expand";
-      
-      // Updated payload: explicitly send required fields
+
+      // Build payload; note we send scriptFormat (instead of style) from briefing
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tone: projectDetails.briefing.overallTone,
-          style: projectDetails.briefing.style,
+          style: projectDetails.briefing.scriptFormat,
+          scriptFormat: projectDetails.briefing.scriptFormat, // using scriptFormat
           templateId: projectDetails.briefing.templateId,
           outline: inputText,
-          conversationContext,
+          conversationContext: conversationContextStr,
           title: projectDetails.title,
           targetAudience: projectDetails.briefing.targetAudience,
           distributionPlatform: projectDetails.briefing.distributionPlatform,
@@ -212,42 +216,33 @@ export default function ProjectEditor() {
           logline: projectDetails.briefing.logline,
           plotOutline: projectDetails.briefing.plotOutline,
           theme: projectDetails.briefing.theme,
-        })
+        }),
       });
-  
+
       if (!response.ok) throw new Error("Request failed");
-  
+
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let done = false;
-  
+      let aiText = "";
+
       while (!done && reader) {
         const { value, done: doneReading } = await reader.read();
         done = doneReading;
         const chunk = decoder.decode(value);
+        aiText += chunk;
         setConversationHistory((prev) => {
           const lastMessage = prev[prev.length - 1];
           if (lastMessage.type === "ai" && lastMessage.isPending) {
-            return [
-              ...prev.slice(0, -1),
-              { ...lastMessage, text: lastMessage.text + chunk }
-            ];
+            return [...prev.slice(0, -1), { ...lastMessage, text: aiText }];
           }
           return prev;
         });
       }
-  
-      // Finalize AI message
-      setConversationHistory((prev) => {
-        const lastMessage = prev[prev.length - 1];
-        if (lastMessage.type === "ai") {
-          return [
-            ...prev.slice(0, -1),
-            { ...lastMessage, isPending: false }
-          ];
-        }
-        return prev;
-      });
+
+      // Remove the temporary AI message and add a finalized one (persisted)
+      setConversationHistory((prev) => prev.filter((msg, idx) => idx !== prev.length - 1));
+      await addMessage({ type: "ai", text: aiText, isPending: false }, true);
     } catch (error) {
       console.error("Error processing request:", error);
       setConversationHistory((prev) => {
@@ -255,7 +250,7 @@ export default function ProjectEditor() {
         if (lastMessage.type === "ai") {
           return [
             ...prev.slice(0, -1),
-            { ...lastMessage, text: "Error processing request. Please try again.", isPending: false }
+            { ...lastMessage, text: "Error processing request. Please try again.", isPending: false },
           ];
         }
         return prev;
@@ -265,7 +260,6 @@ export default function ProjectEditor() {
       setInputText("");
     }
   };
-  
 
   // --- Update Briefing Field ---
   const handleProjectUpdate = (field: keyof Briefing, value: any) => {
@@ -279,15 +273,16 @@ export default function ProjectEditor() {
   };
 
   return (
-    <div className="h-screen bg-gray-50 flex">
+    <div className="flex h-screen bg-gray-50">
       {/* Sidebar: Project Briefing/Settings */}
-      <div className="w-80 bg-white border-r border-gray-200 p-4 flex flex-col overflow-y-auto">
-        <h2 className="text-lg font-semibold mb-4">Project Briefing</h2>
+      <div className="w-80 border-r border-gray-200 bg-white p-4 flex flex-col overflow-y-auto">
+        <h2 className="mb-4 text-lg font-semibold text-gray-900">Project Briefing</h2>
         <div className="space-y-4 flex-1">
           {/* Project Title */}
-          <div>
-            <label className="block text-sm font-medium mb-1">Project Title</label>
+          <div className="space-y-2">
+            <label htmlFor="title" className="block text-sm font-medium">Project Title</label>
             <input
+              id="title"
               value={projectDetails.title}
               onChange={(e) =>
                 setProjectDetails((prev) => ({
@@ -295,24 +290,26 @@ export default function ProjectEditor() {
                   title: e.target.value,
                 }))
               }
-              className="w-full p-2 border rounded-md text-sm"
               placeholder="Untitled Project"
+              className="w-full p-2 border rounded-md text-sm"
             />
           </div>
           {/* Target Audience */}
-          <div>
-            <label className="block text-sm font-medium mb-1">Target Audience</label>
+          <div className="space-y-2">
+            <label htmlFor="audience" className="block text-sm font-medium">Target Audience</label>
             <input
+              id="audience"
               value={projectDetails.briefing?.targetAudience || ""}
               onChange={(e) => handleProjectUpdate("targetAudience", e.target.value)}
-              className="w-full p-2 border rounded-md text-sm"
               placeholder="Demographics, cultural background..."
+              className="w-full p-2 border rounded-md text-sm"
             />
           </div>
           {/* Distribution Platform */}
-          <div>
-            <label className="block text-sm font-medium mb-1">Distribution Platform</label>
+          <div className="space-y-2">
+            <label htmlFor="platform" className="block text-sm font-medium">Distribution Platform</label>
             <select
+              id="platform"
               value={projectDetails.briefing?.distributionPlatform || ""}
               onChange={(e) => handleProjectUpdate("distributionPlatform", e.target.value)}
               className="w-full p-2 border rounded-md text-sm"
@@ -323,87 +320,86 @@ export default function ProjectEditor() {
               <option value="web">Web Series</option>
               <option value="stage">Stage Play</option>
               <option value="podcast">Podcast</option>
+              <option value="youtube">YouTube</option>
             </select>
           </div>
           {/* Genre */}
-          <div>
-            <label className="block text-sm font-medium mb-1">Genre</label>
+          <div className="space-y-2">
+            <label htmlFor="genre" className="block text-sm font-medium">Genre</label>
             <input
+              id="genre"
               value={projectDetails.briefing?.genre || ""}
               onChange={(e) => handleProjectUpdate("genre", e.target.value)}
-              className="w-full p-2 border rounded-md text-sm"
               placeholder="Primary genre/sub-genres..."
+              className="w-full p-2 border rounded-md text-sm"
             />
           </div>
           {/* Stylistic References */}
-          <div>
-            <label className="block text-sm font-medium mb-1">Stylistic References</label>
+          <div className="space-y-2">
+            <label htmlFor="references" className="block text-sm font-medium">Stylistic References</label>
             <textarea
-              value={(projectDetails.briefing?.stylisticReferences || []).join(", ")}
-              onChange={(e) =>
-                handleProjectUpdate("stylisticReferences", e.target.value.split(", ").filter(Boolean))
-              }
-              className="w-full p-2 border rounded-md text-sm h-16"
+              id="references"
+              value={projectDetails.briefing?.stylisticReferences || ""}
+              onChange={(e) => handleProjectUpdate("stylisticReferences", e.target.value)}
               placeholder="Films, writers, or style references..."
+              className="w-full p-2 border rounded-md text-sm h-16"
             />
           </div>
           {/* Logline */}
-          <div>
-            <label className="block text-sm font-medium mb-1">Logline</label>
+          <div className="space-y-2">
+            <label htmlFor="logline" className="block text-sm font-medium">Logline</label>
             <textarea
+              id="logline"
               value={projectDetails.briefing?.logline || ""}
               onChange={(e) => handleProjectUpdate("logline", e.target.value)}
-              className="w-full p-2 border rounded-md text-sm h-24"
               placeholder="One-sentence summary..."
+              className="w-full p-2 border rounded-md text-sm h-24"
             />
           </div>
-          <div className="text-xs text-gray-500">
-            {isSaving ? "Saving changes..." : "Changes auto-save every 2 seconds"}
-          </div>
+        </div>
+        <div className="text-xs text-gray-500">
+          {isSaving ? "Saving changes..." : "Changes auto-save every 2 seconds"}
         </div>
       </div>
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col">
-        <header className="bg-white border-b border-gray-200 p-4">
-          <h1 className="text-xl font-semibold">{projectDetails.title || "Untitled Project"}</h1>
-          <div className="text-sm text-gray-500 mt-1 grid grid-cols-2 gap-2">
+        <header className="border-b border-gray-200 bg-white p-4">
+          <h1 className="text-xl font-semibold text-gray-900">{projectDetails.title || "Untitled Project"}</h1>
+          <div className="mt-1 grid grid-cols-2 gap-2 text-sm text-gray-600">
             <div>Genre: {projectDetails.briefing?.genre || "N/A"}</div>
             <div>Platform: {projectDetails.briefing?.distributionPlatform || "N/A"}</div>
             <div>Tone: {projectDetails.briefing?.overallTone || "N/A"}</div>
-            <div>Style: {projectDetails.briefing?.style || "N/A"}</div>
+            <div>Style: {projectDetails.briefing?.scriptFormat || "N/A"}</div>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
           {conversationHistory.length === 0 ? (
-            <p className="text-gray-500">No conversation yet. Start by sending a message below.</p>
+            <p className="text-center text-gray-500">No conversation yet. Start by sending a message below.</p>
           ) : (
             conversationHistory.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${message.type === "user" ? "justify-end" : "justify-start"}`}
-              >
+              <div key={message.id} className={`flex ${message.type === "user" ? "justify-end" : "justify-start"}`}>
                 <div
-                  className={`max-w-2xl p-3 rounded-lg ${
-                    message.type === "user"
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-100 text-gray-800"
+                  className={`relative max-w-2xl rounded-lg p-4 ${
+                    message.type === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-gray-900"
                   } ${message.isPending ? "opacity-75" : ""}`}
                 >
                   {message.isPending ? (
                     <div className="flex items-center space-x-2">
-                      <div className="dot-flashing"></div>
-                      <span>Generating...</span>
+                      <div className="h-2 w-2 animate-pulse rounded-full bg-current" />
+                      <div className="h-2 w-2 animate-pulse rounded-full bg-current" style={{ animationDelay: "0.2s" }} />
+                      <div className="h-2 w-2 animate-pulse rounded-full bg-current" style={{ animationDelay: "0.4s" }} />
+                      <span className="ml-2">Generating...</span>
                     </div>
                   ) : (
                     <>
-                      <div className="text-sm whitespace-pre-wrap prose max-w-none">
+                      <div className="prose max-w-none text-sm">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
                           {message.text}
                         </ReactMarkdown>
                       </div>
-                      <div className="text-xs mt-1 opacity-70">
+                      <div className="mt-2 text-xs text-gray-500">
                         {new Date(message.timestamp).toLocaleTimeString()}
                       </div>
                     </>
@@ -416,7 +412,7 @@ export default function ProjectEditor() {
         </div>
 
         {/* Input Area */}
-        <form onSubmit={handleSubmit} className="border-t border-gray-200 p-4 bg-white">
+        <form onSubmit={handleSubmit} className="border-t border-gray-200 bg-white p-4">
           <div className="flex gap-2">
             <select
               value={selectedAction}
@@ -433,43 +429,21 @@ export default function ProjectEditor() {
               className="flex-1 p-2 border rounded-md"
               disabled={loading}
             />
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-            >
+            <button type="submit" disabled={loading} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
               {loading ? "Processing..." : "Send"}
             </button>
           </div>
-          <div className="mt-2 flex gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={() => setInputText("Add character development for...")}
-              className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
-            >
-              Character Development
-            </button>
-            <button
-              type="button"
-              onClick={() => setInputText("Create a plot twist involving...")}
-              className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
-            >
-              Plot Twist
-            </button>
-            <button
-              type="button"
-              onClick={() => setInputText("Write dialogue between...")}
-              className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
-            >
-              Dialogue Scene
-            </button>
-            <button
-              type="button"
-              onClick={() => setInputText("Describe a transition to...")}
-              className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
-            >
-              Scene Transition
-            </button>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {["Character Development", "Plot Twist", "Dialogue Scene", "Scene Transition"].map((suggestion) => (
+              <button
+                key={suggestion}
+                type="button"
+                onClick={() => setInputText(`Add ${suggestion.toLowerCase()} for...`)}
+                className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
+              >
+                {suggestion}
+              </button>
+            ))}
           </div>
         </form>
       </div>

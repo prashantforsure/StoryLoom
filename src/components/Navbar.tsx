@@ -19,11 +19,7 @@ export default function Navbar() {
   const { data: session, status } = useSession()
   const router = useRouter()
 
-  useEffect(() => {
-    if (session) {
-      router.push('/dashboard')
-    }
-  }, [session, router])
+ 
 
   const handleAuthAction = () => {
     if (session) {
