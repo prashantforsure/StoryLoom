@@ -194,9 +194,11 @@ TimeX Pro. For those who make every second count.`,
             </Link>
           )}
         </div>
+        <Link href="/dashboard">
               <button className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-md transition-colors shadow-md hover:shadow-lg">
-                Get Started
+              Get Started
               </button>
+              </Link>
             </div>
 
             {/* Mobile menu button */}
