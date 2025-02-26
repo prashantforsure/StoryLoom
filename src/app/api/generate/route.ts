@@ -108,7 +108,7 @@ Return your output as a well-formatted Markdown text following the guidelines ab
 
     const together = new Together({ apiKey: process.env.TOGETHER_AI_API_KEY });
     const stream = await together.chat.completions.create({
-      model: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+      model: "deepseek-ai/DeepSeek-R1",
       messages: [{ role: "user", content: prompt }],
       stream: true,
       temperature: 0.7,
