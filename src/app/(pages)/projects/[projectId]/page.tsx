@@ -106,14 +106,26 @@ export default function ProjectEditor() {
           content: string;
           createdAt: string;
         }) => {
-          // Check if AI message contains thinking section
+          // Check if AI message contains thinking section with <think> tags
           let messageText = msg.content;
           let thinkingText = "";
           
-          if (msg.role === "AI" && msg.content.includes("Thinking:")) {
-            const parts = msg.content.split("Thinking:");
-            messageText = parts[0].trim();
-            thinkingText = parts.length > 1 ? parts[1].trim() : "";
+          if (msg.role === "AI") {
+            const thinkMatch = msg.content.match(/<think>([\s\S]*?)<\/think>/);
+            if (thinkMatch) {
+              // Extract content inside <think> tags
+              thinkingText = thinkMatch[1].trim();
+              // Remove the <think> section from the main content
+              messageText = msg.content.replace(/<think>[\s\S]*?<\/think>/, "").trim();
+            } else if (msg.content.includes("Thinking:")) {
+              // Fallback for older format
+              const parts = msg.content.split("Thinking:");
+              messageText = parts[0].trim();
+              thinkingText = parts.length > 1 ? parts[1].trim() : "";
+            }
+            
+            // Format the messageText to replace * headers with bold
+            messageText = formatHeadersAsBold(messageText);
           }
           
           return {
@@ -134,6 +146,14 @@ export default function ProjectEditor() {
     };
     loadProjectData();
   }, [projectId]);
+
+  // --- Format headers: Replace markdown * with bold text ---
+  const formatHeadersAsBold = (text: string) => {
+    // Replace # headers with bold text
+    return text.replace(/^(#{1,6})\s+(.+)$/gm, (_, hashes, content) => {
+      return `**${content.trim()}**`;
+    });
+  };
 
   // --- Auto-save project details (debounced) ---
   useEffect(() => {
@@ -179,10 +199,10 @@ export default function ProjectEditor() {
     
     if (persist && (msg.type !== "ai" || (msg.type === "ai" && msg.text.trim() !== ""))) {
       try {
-        // Combine thinking and response text for storage if both exist
+        // Combine thinking and response text for storage
         let contentToStore = msg.text;
         if (msg.thinkingText && msg.thinkingText.trim() !== "") {
-          contentToStore = `${contentToStore}\n\nThinking: ${msg.thinkingText}`;
+          contentToStore = `${contentToStore}\n\n<think>${msg.thinkingText}</think>`;
         }
         
         await fetch(`/api/projects/${projectId}/messages`, {
@@ -217,7 +237,7 @@ export default function ProjectEditor() {
     setConversationHistory((prev) => {
       return prev.map((msg) => {
         if (msg.id === messageId) {
-          return { ...msg, text };
+          return { ...msg, text: formatHeadersAsBold(text) };
         }
         return msg;
       });
@@ -289,10 +309,10 @@ export default function ProjectEditor() {
         const decoder = new TextDecoder();
         let done = false;
         let fullContent = "";
-        let thinkingText = "";
-        let responseText = "";
-        let foundResponseDelimiter = false;
-
+        let currentThinkingText = "";
+        let currentResponseText = "";
+        let isInsideThinkTag = false;
+        
         while (!done) {
           const { value, done: doneReading } = await reader.read();
           done = doneReading;
@@ -301,30 +321,55 @@ export default function ProjectEditor() {
             const chunk = decoder.decode(value, { stream: !done });
             fullContent += chunk;
             
-            // Check if the response contains the separator
-            if (fullContent.includes("RESPONSE_START") && !foundResponseDelimiter) {
-              foundResponseDelimiter = true;
-              const parts = fullContent.split("RESPONSE_START");
-              thinkingText = parts[0].trim();
-              responseText = parts[1] ? parts[1].trim() : "";
+            // Parse the content to extract <think> tags and response
+            let updatedThinking = currentThinkingText;
+            let updatedResponse = currentResponseText;
+            
+            // Look for opening and closing think tags
+            const openTagIndex = fullContent.indexOf("<think>");
+            const closeTagIndex = fullContent.indexOf("</think>");
+            
+            if (openTagIndex !== -1 && closeTagIndex === -1) {
+              // Found opening tag but not closing tag yet
+              isInsideThinkTag = true;
+              // Extract everything before the think tag as response
+              if (openTagIndex > 0) {
+                updatedResponse = fullContent.substring(0, openTagIndex).trim();
+              }
+              // Extract partial thinking content
+              updatedThinking = fullContent.substring(openTagIndex + 7).trim();
+            } else if (openTagIndex !== -1 && closeTagIndex !== -1) {
+              // Found both opening and closing tags
+              isInsideThinkTag = false;
+              // Extract thinking content
+              updatedThinking = fullContent.substring(openTagIndex + 7, closeTagIndex).trim();
               
-              // Update the AI message with separate thinking and response
-              updateAiMessage(thinkingId, responseText);
-              updateThinkingMessage(thinkingId, thinkingText);
-            } else if (foundResponseDelimiter) {
-              // Update only the response part, keeping thinking intact
-              const parts = fullContent.split("RESPONSE_START");
-              responseText = parts[1].trim();
-              updateAiMessage(thinkingId, responseText);
+              // Extract response (combine before and after think tags)
+              const beforeThink = fullContent.substring(0, openTagIndex).trim();
+              const afterThink = fullContent.substring(closeTagIndex + 8).trim();
+              updatedResponse = (beforeThink + " " + afterThink).trim();
+            } else if (isInsideThinkTag) {
+              // Still inside an open think tag from previous chunks
+              updatedThinking = fullContent.substring(fullContent.indexOf("<think>") + 7).trim();
             } else {
-              // We're still in the thinking phase
-              thinkingText = fullContent;
-              updateThinkingMessage(thinkingId, thinkingText);
+              // No think tags found, treat as response
+              updatedResponse = fullContent.trim();
             }
             
-            // Keep these references updated for final saving
-            thinkingRef.current = thinkingText;
-            aiMessageRef.current = responseText;
+            // Update the message with separated thinking and response
+            if (updatedThinking !== currentThinkingText) {
+              currentThinkingText = updatedThinking;
+              updateThinkingMessage(thinkingId, currentThinkingText);
+            }
+            
+            if (updatedResponse !== currentResponseText) {
+              currentResponseText = updatedResponse;
+              updateAiMessage(thinkingId, currentResponseText);
+            }
+            
+            // Keep references updated for final saving
+            thinkingRef.current = currentThinkingText;
+            aiMessageRef.current = currentResponseText;
             
             // Smooth scroll to bottom
             requestAnimationFrame(() => {
@@ -333,18 +378,23 @@ export default function ProjectEditor() {
           }
         }
         
-        // If we never found the response delimiter, move everything to thinking
-        if (!foundResponseDelimiter) {
-          thinkingText = fullContent;
-          responseText = ""; // No response part found
-          
-          // Update the message accordingly
-          updateThinkingMessage(thinkingId, thinkingText);
-          updateAiMessage(thinkingId, responseText);
-          
-          thinkingRef.current = thinkingText;
-          aiMessageRef.current = responseText;
+        // Process full content one last time to ensure everything is captured
+        let finalThinking = "";
+        let finalResponse = "";
+        
+        const thinkMatch = fullContent.match(/<think>([\s\S]*?)<\/think>/);
+        if (thinkMatch) {
+          finalThinking = thinkMatch[1].trim();
+          // Remove the think tags and its content from the response
+          finalResponse = fullContent.replace(/<think>[\s\S]*?<\/think>/, "").trim();
+        } else {
+          // No think tags found in the final content
+          finalResponse = fullContent;
         }
+        
+        // Update refs for final saving
+        thinkingRef.current = finalThinking;
+        aiMessageRef.current = finalResponse;
         
         // Update final message state
         setConversationHistory(prev => 
@@ -352,7 +402,7 @@ export default function ProjectEditor() {
             if (msg.id === thinkingId) {
               return { 
                 ...msg, 
-                text: aiMessageRef.current || "",
+                text: formatHeadersAsBold(aiMessageRef.current || ""),
                 thinkingText: thinkingRef.current || "", 
                 isPending: false,
                 isThinkingVisible: false // Auto-collapse thinking when done
@@ -362,12 +412,12 @@ export default function ProjectEditor() {
           })
         );
 
-        // Persist final AI message with thinking content
+        // Persist final AI message with thinking content in <think> tags
         await fetch(`/api/projects/${projectId}/messages`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            content: `${aiMessageRef.current || ""}\n\nThinking: ${thinkingRef.current || ""}`,
+            content: `${aiMessageRef.current || ""}\n\n<think>${thinkingRef.current || ""}</think>`,
             role: "AI",
           }),
         });
