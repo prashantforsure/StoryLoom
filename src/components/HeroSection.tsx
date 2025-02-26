@@ -147,7 +147,7 @@ TimeX Pro. For those who make every second count.`,
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
               <div className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-blue-500 bg-clip-text text-transparent">
-                ScriptAI
+                ScriptLoom
               </div>
             </div>
 

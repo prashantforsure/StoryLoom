@@ -791,7 +791,7 @@ export default function ProjectEditor() {
                 className="w-32 p-2 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               >
                 <option value="generate">Generate</option>
-                <option value="expand">Expand</option>
+                
               </select>
               <input
                 value={inputText}
