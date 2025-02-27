@@ -555,9 +555,41 @@ export default function ProjectEditor() {
                 <option value="web">Web Series</option>
                 <option value="stage">Stage Play</option>
                 <option value="podcast">Podcast</option>
+                <option value="instagram">Instagram Reels</option>
                 <option value="youtube">YouTube</option>
               </select>
             </div>
+
+
+          {/* tone */}
+          <div className="space-y-2">
+  <label htmlFor="tone" className="block text-sm font-medium text-slate-700">
+    Tone
+  </label>
+  <select
+    id="tone"
+    value={projectDetails.briefing?.overallTone || ""}
+    onChange={(e) => handleProjectUpdate("overallTone", e.target.value)}
+    className="w-full p-2 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+  >
+    <option value="">Select Tone</option>
+    <option value="Formal">Formal Tone</option>
+    <option value="Dramatic">Dramatic</option>
+    <option value="Comedic">Comedic</option>
+    <option value="Sarcastic">Sarcastic</option>
+    <option value="Serious">Serious</option>
+    <option value="Lighthearted">Lighthearted</option>
+    <option value="Melancholic">Melancholic</option>
+    <option value="Inspirational">Inspirational</option>
+    <option value="Suspenseful">Suspenseful</option>
+    <option value="Romantic">Romantic</option>
+    <option value="Optimistic">Optimistic</option>
+    <option value="Pessimistic">Pessimistic</option>
+    <option value="Ironic">Ironic</option>
+    <option value="Whimsical">Whimsical</option>
+  </select>
+</div>
+
             {/* Genre */}
             <div className="space-y-2">
               <label htmlFor="genre" className="block text-sm font-medium text-slate-700">
