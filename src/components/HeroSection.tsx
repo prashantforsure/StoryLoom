@@ -162,9 +162,7 @@ TimeX Pro. For those who make every second count.`,
               <Link href="#testimonials" className="text-slate-700 hover:text-purple-600 transition-colors">
                 Testimonials
               </Link>
-              <Link href="#pricing" className="text-slate-700 hover:text-purple-600 transition-colors">
-                Pricing
-              </Link>
+              
             </nav>
 
             <div className="hidden md:flex items-center space-x-4">
@@ -298,11 +296,11 @@ TimeX Pro. For those who make every second count.`,
                   streamlines your creative workflow.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-                  <button className="px-8 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-md transition-colors shadow-md hover:shadow-lg text-lg font-medium">
+                  <Link href="/dashboard"><button className="px-8 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-md transition-colors shadow-md hover:shadow-lg text-lg font-medium">
                     Start Free Trial
-                  </button>
+                  </button></Link>
                   <button className="px-8 py-3 border border-slate-300 hover:border-purple-600 hover:text-purple-600 rounded-md transition-colors text-lg font-medium flex items-center justify-center">
-                    <Play size={18} className="mr-2" /> Watch Demo
+                    <Play size={18} className="mr-2" /> Watch Demoo
                   </button>
                 </div>
               </div>
