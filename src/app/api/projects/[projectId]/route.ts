@@ -5,7 +5,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth/auth";
 import prisma from "@/lib/prisma";
 
-export async function GET(request: Request, { params }: { params: { projectId: string } }) {
+export async function GET(request: Request,  { params }: { params: Promise<{ projectId: string }> }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -13,8 +13,7 @@ export async function GET(request: Request, { params }: { params: { projectId: s
     }
     
     // Await the params object
-    const resolvedParams = await Promise.resolve(params);
-    const { projectId } = resolvedParams;
+    const projectId = (await params).projectId
     
     const project = await prisma.scriptProject.findUnique({
       where: { id: projectId },

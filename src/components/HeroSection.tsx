@@ -277,8 +277,8 @@ TimeX Pro. For those who make every second count.`,
 
       <main>
         {/* Hero Section */}
-        <section className="relative overflow-hidden pt-16 md:pt-20 lg:pt-24">
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+        <section className="relative overflow-hidden pt-16 md:pt-20 lg:pt-24 pb-32">
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
               <div className="text-center lg:text-left">
                 <div className="inline-block px-3 py-1 text-xs font-medium bg-purple-100 text-purple-800 rounded-full mb-6">
@@ -296,11 +296,13 @@ TimeX Pro. For those who make every second count.`,
                   streamlines your creative workflow.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-                  <Link href="/dashboard"><button className="px-8 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-md transition-colors shadow-md hover:shadow-lg text-lg font-medium">
-                    Start Free Trial
-                  </button></Link>
+                  <Link href="/dashboard">
+                    <button className="px-8 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-md transition-colors shadow-md hover:shadow-lg text-lg font-medium">
+                      Start Free Trial
+                    </button>
+                  </Link>
                   <button className="px-8 py-3 border border-slate-300 hover:border-purple-600 hover:text-purple-600 rounded-md transition-colors text-lg font-medium flex items-center justify-center">
-                    <Play size={18} className="mr-2" /> Watch Demoo
+                    <Play size={18} className="mr-2" /> Watch Demo
                   </button>
                 </div>
               </div>
@@ -353,7 +355,7 @@ TimeX Pro. For those who make every second count.`,
           </div>
 
           {/* Wave divider */}
-          <div className="absolute bottom-0 left-0 right-0">
+          <div className="absolute bottom-0 left-0 right-0 z-0">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 320" className="w-full">
               <path
                 fill="#f8fafc"
