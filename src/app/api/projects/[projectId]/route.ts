@@ -37,7 +37,7 @@ export async function GET(request: Request,  { params }: { params: Promise<{ pro
   }
 }
 
-export async function PATCH(request: Request, { params }: { params: { projectId: string } }) {
+export async function PATCH(request: Request,  { params }: { params: Promise<{ projectId: string }> }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -45,9 +45,9 @@ export async function PATCH(request: Request, { params }: { params: { projectId:
     }
     
     // Await params correctly
-    const resolvedParams = await Promise.resolve(params);
-    const { projectId } = resolvedParams;
-    
+    // const resolvedParams = await Promise.resolve(params);
+    // const { projectId } = resolvedParams;
+    const projectId = (await params).projectId
     const body = await request.json();
     if (!body || typeof body !== "object") {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 });

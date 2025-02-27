@@ -35,7 +35,7 @@ export async function GET(request: Request,  { params }: { params: Promise<{ pro
   }
 }
 
-export async function POST(request: Request, { params }: { params: { projectId: string } }) {
+export async function POST(request: Request, { params }: { params: Promise<{ projectId: string }> }) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
@@ -43,7 +43,7 @@ export async function POST(request: Request, { params }: { params: { projectId: 
     }
 
     // Await params to get projectId
-    const { projectId } = await params
+    const projectId = (await params).projectId
 
     // Validate request body
     const body = await request.json()
