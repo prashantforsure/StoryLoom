@@ -70,38 +70,50 @@ export async function POST(request: Request) {
 
     // Construct the comprehensive prompt
    // Construct the comprehensive prompt
-const prompt = `
-You are a professional scriptwriter tasked with creating a clean, well-formatted script. Your output should ONLY contain the script itself with no explanations, notes, or additional commentary.
-
-${titleText}
-${overallToneText}${targetAudienceText}${distributionText}${genreText}${stylisticText}${loglineText}${plotOutlineText}${themeText}
-
-Follow these specific formatting rules:
-1. Use standard screenplay format with clear scene headings (INT./EXT. LOCATION - TIME)
-2. Format character names in ALL CAPS before their dialogue
-3. Make narrator or voice-over lines **bold** using markdown syntax
-4. Keep action/description paragraphs concise and visual
-5. Use proper screenplay transitions (CUT TO:, FADE TO:, etc.) sparingly
-6. Indent dialogue properly
-7. Include only essential parentheticals for acting direction
-
-The script should be in ${styleOrFormat} format.
-
-Based on this outline:
-${outline}
-
-IMPORTANT: Your response should ONLY contain the properly formatted script. Do not include any explanations, introductions, or notes about the script.
-`.trim();
+   const prompt = `
+   Imagine you are a world-class, award-winning scriptwriter renowned for crafting engaging, visually rich screenplays for film, television, and digital media. You have been given the following detailed project briefing:
+   
+   ${titleText}
+   ${overallToneText}${targetAudienceText}${distributionText}${genreText}${stylisticText}${loglineText}${plotOutlineText}${themeText}
+   
+   **Project Overview & Objectives:**
+   - Purpose & Goal: Create an immersive narrative that captivates the audience.
+   - Target Audience: ${targetAudience || "Not specified"}
+   - Distribution & Platform: ${distributionPlatform || "Not specified"}
+   
+   **Genre & Style:**
+   - Genre: ${genre || "Not specified"}
+   - Script Format: ${styleOrFormat}
+   - Stylistic References: ${(stylisticReferences && (Array.isArray(stylisticReferences) ? stylisticReferences.join(", ") : stylisticReferences)) || "Not specified"}
+   
+   **Story Elements & Structure:**
+   - Logline & Premise: ${logline || "Not specified"}
+   - Plot Outline & Structure: ${plotOutline || "Not specified"}
+   - Theme & Message: ${theme || "Not specified"}
+   - Use clear scene headings, detailed descriptions, and dynamic dialogue to convey the narrative.
+   
+   **Characters & Dialogue:**
+   - Develop vivid, realistic characters and write engaging dialogue that reflects the desired tone and style.
+   
+   **Technical & Formatting Requirements:**
+   - Use professional screenplay formatting in Markdown.
+   - Ensure the final output includes clear section headers, bullet lists for key points, and proper transitions.
+   
+   Use the following outline as your guide:
+   ${outline}
+   
+   Return your output as a well-formatted Markdown text following the guidelines above.
+       `.trim();
 
     console.log("Prompt sent to Together AI:", prompt);
 
     const together = new Together({ apiKey: process.env.TOGETHER_API_KEY });
     const stream = await together.chat.completions.create({
-      model: "deepseek-ai/DeepSeek-R1",
+      model: "deepseek-ai/DeepSeek-V3",
       messages: [{ role: "user", content: prompt }],
       stream: true,
       temperature: 0.7,
-      max_tokens: 30000,
+      max_tokens: 50000,
     });
 
     const encoder = new TextEncoder();
