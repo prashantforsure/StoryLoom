@@ -96,7 +96,7 @@ export default function Editor() {
 
       const endpoint = selectedAction === "generate" ? "/api/generate" : "/api/expand";
       
-      // In the handleSubmit function, update the fetch body:
+      
 const response = await fetch(endpoint, {
   method: "POST",
   headers: { "Content-Type": "application/json" },
@@ -105,8 +105,8 @@ const response = await fetch(endpoint, {
     tone,
     style,
     templateId: template,
-    outline: inputText, // Changed from 'input' to 'outline'
-    conversationContext: conversationHistory // Changed from 'context' to 'conversationContext'
+    outline: inputText, 
+    conversationContext: conversationHistory 
       .filter(msg => !msg.isPending)
       .map(msg => `${msg.type}: ${msg.text}`)
       .join("\n")
