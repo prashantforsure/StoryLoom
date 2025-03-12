@@ -131,6 +131,14 @@ const formatScriptContent = (content: string) => {
     .replace(/\*\*(.*?):\*\*/g, '<h3 class="text-lg font-semibold mt-4 mb-2 text-purple-600">$1:</h3>')
 }
 
+// Add this function to better handle large script content
+// Add this after your existing formatScriptContent function
+
+const truncateForDisplay = (content: string, maxLength = 100000) => {
+  if (content.length <= maxLength) return content
+  return content.substring(0, maxLength) + "..."
+}
+
 export default function ProjectEditor() {
   const { data: session } = useSession()
   const router = useRouter()
@@ -149,6 +157,11 @@ export default function ProjectEditor() {
   const lastSaveTimeRef = useRef<number>(Date.now())
   const savedMessageIdsRef = useRef<Set<string>>(new Set())
   const isMobile = useMobileDetect()
+
+  // Add a debug mode to help troubleshoot issues
+  // Add this state near your other state declarations
+
+  const [debugMode, setDebugMode] = useState(false)
 
   // Add this hook inside the ProjectEditor component, after the other state declarations
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
@@ -404,6 +417,12 @@ export default function ProjectEditor() {
         .map((msg) => `${msg.type}: ${msg.text}`)
         .join("\n")
 
+      // Modify the fetch request to include a longer timeout
+      // Add this near the beginning of the handleSubmit function, after the initial setup
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 60000) // 60 second timeout
+
+      // Then replace the existing fetch call with this:
       const endpoint = selectedAction === "generate" ? "/api/generate" : "/api/expand"
       const response = await fetch(endpoint, {
         method: "POST",
@@ -424,7 +443,11 @@ export default function ProjectEditor() {
           plotOutline: projectDetails.briefing.plotOutline,
           theme: projectDetails.briefing.theme,
         }),
+        signal: controller.signal,
       })
+
+      // Don't forget to clear the timeout
+      clearTimeout(timeoutId)
 
       if (!response.ok) throw new Error("Request failed")
 
@@ -433,87 +456,107 @@ export default function ProjectEditor() {
         const decoder = new TextDecoder()
         let done = false
         let fullContent = ""
+
+        // Also modify the streaming part to handle larger responses better
+        // In the streaming section, add a buffer size check:
+
+        let bufferSize = 0
+        const MAX_BUFFER_SIZE = 1024 * 1024 // 1MB buffer limit
+
         let currentThinkingText = ""
         let currentResponseText = ""
         let isInsideThinkTag = false
 
         while (!done) {
-          const { value, done: doneReading } = await reader.read()
-          done = doneReading
+          try {
+            const { value, done: doneReading } = await reader.read()
+            done = doneReading
 
-          if (value) {
-            const chunk = decoder.decode(value, { stream: !done })
-            fullContent += chunk
+            if (value) {
+              const chunk = decoder.decode(value, { stream: !done })
+              fullContent += chunk
+              bufferSize += chunk.length
 
-            // Parse the content to extract thinking tags and response
-            let updatedThinking = currentThinkingText
-            let updatedResponse = currentResponseText
-
-            // Fix: Look for both <Thinking> and <Thinking> tags with consistent handling
-            // First check for <Thinking> tags (standard format)
-            const openTagIndex = fullContent.indexOf("<Thinking>")
-            const closeTagIndex = fullContent.indexOf("</Thinking>")
-
-            // If not found, check for <Thinking> tags (alternative format)
-            const altOpenTagIndex = openTagIndex === -1 ? fullContent.indexOf("<Thinking>") : -1
-            const altCloseTagIndex = closeTagIndex === -1 ? fullContent.indexOf("</Thinking>") : -1
-
-            // Use whichever tag format was found
-            const effectiveOpenTagIndex = openTagIndex !== -1 ? openTagIndex : altOpenTagIndex
-            const effectiveCloseTagIndex = closeTagIndex !== -1 ? closeTagIndex : altCloseTagIndex
-            const tagLength = openTagIndex !== -1 ? 10 : altOpenTagIndex !== -1 ? 7 : 10 // <Thinking> is 10 chars, <Thinking> is 7
-            const closeTagLength = closeTagIndex !== -1 ? 11 : altCloseTagIndex !== -1 ? 8 : 11 // </Thinking> is 11 chars, </Thinking> is 8
-
-            if (effectiveOpenTagIndex !== -1 && effectiveCloseTagIndex === -1) {
-              // Found opening tag but not closing tag yet
-              isInsideThinkTag = true
-              // Extract everything before the think tag as response
-              if (effectiveOpenTagIndex > 0) {
-                updatedResponse = fullContent.substring(0, effectiveOpenTagIndex).trim()
+              // Check if buffer is getting too large
+              if (bufferSize > MAX_BUFFER_SIZE) {
+                console.warn("Response buffer size exceeds limit, may cause issues")
               }
-              // Extract partial thinking content
-              updatedThinking = fullContent.substring(effectiveOpenTagIndex + tagLength).trim()
-            } else if (effectiveOpenTagIndex !== -1 && effectiveCloseTagIndex !== -1) {
-              // Found both opening and closing tags
-              isInsideThinkTag = false
-              // Extract thinking content
-              updatedThinking = fullContent.substring(effectiveOpenTagIndex + tagLength, effectiveCloseTagIndex).trim()
 
-              // Extract response (combine before and after think tags)
-              const beforeThink = fullContent.substring(0, effectiveOpenTagIndex).trim()
-              const afterThink = fullContent.substring(effectiveCloseTagIndex + closeTagLength).trim()
-              updatedResponse = (beforeThink + " " + afterThink).trim()
-            } else if (isInsideThinkTag) {
-              // Still inside an open think tag from previous chunks
-              const tagStart =
-                fullContent.indexOf("<Thinking>") !== -1
-                  ? fullContent.indexOf("<Thinking>") + 10
-                  : fullContent.indexOf("<Thinking>") + 7
-              updatedThinking = fullContent.substring(tagStart).trim()
-            } else {
-              // No think tags found, treat as response
-              updatedResponse = fullContent.trim()
+              // Parse the content to extract thinking tags and response
+              let updatedThinking = currentThinkingText
+              let updatedResponse = currentResponseText
+
+              // Fix: Look for both <Thinking> and <Thinking> tags with consistent handling
+              // First check for <Thinking> tags (standard format)
+              const openTagIndex = fullContent.indexOf("<Thinking>")
+              const closeTagIndex = fullContent.indexOf("</Thinking>")
+
+              // If not found, check for <Thinking> tags (alternative format)
+              const altOpenTagIndex = openTagIndex === -1 ? fullContent.indexOf("<Thinking>") : -1
+              const altCloseTagIndex = closeTagIndex === -1 ? fullContent.indexOf("</Thinking>") : -1
+
+              // Use whichever tag format was found
+              const effectiveOpenTagIndex = openTagIndex !== -1 ? openTagIndex : altOpenTagIndex
+              const effectiveCloseTagIndex = closeTagIndex !== -1 ? closeTagIndex : altCloseTagIndex
+              const tagLength = openTagIndex !== -1 ? 10 : altOpenTagIndex !== -1 ? 7 : 10 // <Thinking> is 10 chars, <Thinking> is 7
+              const closeTagLength = closeTagIndex !== -1 ? 11 : altCloseTagIndex !== -1 ? 8 : 11 // </Thinking> is 11 chars, </Thinking> is 8
+
+              if (effectiveOpenTagIndex !== -1 && effectiveCloseTagIndex === -1) {
+                // Found opening tag but not closing tag yet
+                isInsideThinkTag = true
+                // Extract everything before the think tag as response
+                if (effectiveOpenTagIndex > 0) {
+                  updatedResponse = fullContent.substring(0, effectiveOpenTagIndex).trim()
+                }
+                // Extract partial thinking content
+                updatedThinking = fullContent.substring(effectiveOpenTagIndex + tagLength).trim()
+              } else if (effectiveOpenTagIndex !== -1 && effectiveCloseTagIndex !== -1) {
+                // Found both opening and closing tags
+                isInsideThinkTag = false
+                // Extract thinking content
+                updatedThinking = fullContent
+                  .substring(effectiveOpenTagIndex + tagLength, effectiveCloseTagIndex)
+                  .trim()
+
+                // Extract response (combine before and after think tags)
+                const beforeThink = fullContent.substring(0, effectiveOpenTagIndex).trim()
+                const afterThink = fullContent.substring(effectiveCloseTagIndex + closeTagLength).trim()
+                updatedResponse = (beforeThink + " " + afterThink).trim()
+              } else if (isInsideThinkTag) {
+                // Still inside an open think tag from previous chunks
+                const tagStart =
+                  fullContent.indexOf("<Thinking>") !== -1
+                    ? fullContent.indexOf("<Thinking>") + 10
+                    : fullContent.indexOf("<Thinking>") + 7
+                updatedThinking = fullContent.substring(tagStart).trim()
+              } else {
+                // No think tags found, treat as response
+                updatedResponse = fullContent.trim()
+              }
+
+              // Update the message with separated thinking and response
+              if (updatedThinking !== currentThinkingText) {
+                currentThinkingText = updatedThinking
+                updateThinkingMessage(thinkingId, currentThinkingText)
+              }
+
+              if (updatedResponse !== currentResponseText) {
+                currentResponseText = updatedResponse
+                updateAiMessage(thinkingId, currentResponseText)
+              }
+
+              // Keep references updated for final saving
+              thinkingRef.current = currentThinkingText
+              aiMessageRef.current = currentResponseText
+
+              // Smooth scroll to bottom
+              requestAnimationFrame(() => {
+                chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
+              })
             }
-
-            // Update the message with separated thinking and response
-            if (updatedThinking !== currentThinkingText) {
-              currentThinkingText = updatedThinking
-              updateThinkingMessage(thinkingId, currentThinkingText)
-            }
-
-            if (updatedResponse !== currentResponseText) {
-              currentResponseText = updatedResponse
-              updateAiMessage(thinkingId, currentResponseText)
-            }
-
-            // Keep references updated for final saving
-            thinkingRef.current = currentThinkingText
-            aiMessageRef.current = currentResponseText
-
-            // Smooth scroll to bottom
-            requestAnimationFrame(() => {
-              chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
-            })
+          } catch (error) {
+            console.error("Error reading stream:", error)
+            break
           }
         }
 
@@ -810,12 +853,18 @@ export default function ProjectEditor() {
               <div className="flex items-center space-x-2 sm:space-x-4">
                 {!isMobile && (
                   <button
-                    onClick={() => setIsSidebarOpen(true)}
+                    onClick={() => setDebugMode(!debugMode)}
                     className="p-2 rounded-md text-slate-600 hover:text-purple-600 hover:bg-purple-100 transition-colors"
                   >
-                    <Settings size={20} />
+                    {debugMode ? "Hide Debug" : "Debug"}
                   </button>
                 )}
+                <button
+                  onClick={() => setIsSidebarOpen(true)}
+                  className="p-2 rounded-md text-slate-600 hover:text-purple-600 hover:bg-purple-100 transition-colors"
+                >
+                  <Settings size={20} />
+                </button>
                 <button
                   onClick={handleManualSave}
                   className="p-2 rounded-md text-slate-600 hover:text-purple-600 hover:bg-purple-100 transition-colors"
@@ -889,7 +938,7 @@ export default function ProjectEditor() {
                             <div
                               className="relative"
                               dangerouslySetInnerHTML={{
-                                __html: formatScriptContent(message.text),
+                                __html: formatScriptContent(truncateForDisplay(message.text)),
                               }}
                             />
                             {message.text.trim().length > 0 && (
@@ -978,6 +1027,27 @@ export default function ProjectEditor() {
                 </div>
               </div>
             ))
+          )}
+          {debugMode && (
+            <div className="bg-slate-800 text-white p-4 rounded-md text-xs font-mono">
+              <h3 className="text-sm font-bold mb-2">Debug Info:</h3>
+              <p>
+                Last message length:{" "}
+                {conversationHistory.length > 0 ? conversationHistory[conversationHistory.length - 1].text.length : 0}{" "}
+                chars
+              </p>
+              <p>Messages in history: {conversationHistory.length}</p>
+              <p>Saved message IDs: {Array.from(savedMessageIdsRef.current).length}</p>
+              <details>
+                <summary className="cursor-pointer">Last message preview</summary>
+                <pre className="mt-2 overflow-x-auto max-h-40">
+                  {conversationHistory.length > 0
+                    ? conversationHistory[conversationHistory.length - 1].text.substring(0, 500) +
+                      (conversationHistory[conversationHistory.length - 1].text.length > 500 ? "..." : "")
+                    : "No messages"}
+                </pre>
+              </details>
+            </div>
           )}
           <div ref={chatEndRef} />
         </div>
