@@ -106,13 +106,13 @@ Return your output as a well-formatted Markdown text following the guidelines ab
 
     console.log("Prompt sent to Together AI:", prompt);
 
-    const together = new Together({ apiKey: process.env.TOGETHER_AI_API_KEY });
+    const together = new Together({ apiKey: process.env.TOGETHER_API_KEY });
     const stream = await together.chat.completions.create({
       model: "deepseek-ai/DeepSeek-R1",
       messages: [{ role: "user", content: prompt }],
       stream: true,
       temperature: 0.7,
-      max_tokens: 10000,
+      max_tokens: 30000,
     });
 
     const encoder = new TextEncoder();
