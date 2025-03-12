@@ -17,7 +17,7 @@ export async function generateText(prompt: string): Promise<string> {
   const payload = {
     prompt, // prompt to send to the model
     // You can add additional parameters here if Together AI supports them
-    max_tokens: 300, // example parameter, adjust as needed
+    max_tokens: 10000, // example parameter, adjust as needed
     temperature: 0.7,
   };
 

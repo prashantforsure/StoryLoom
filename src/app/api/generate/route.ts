@@ -112,7 +112,7 @@ Return your output as a well-formatted Markdown text following the guidelines ab
       messages: [{ role: "user", content: prompt }],
       stream: true,
       temperature: 0.7,
-      max_tokens: 1500,
+      max_tokens: 10000,
     });
 
     const encoder = new TextEncoder();
